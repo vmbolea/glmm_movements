@@ -1,0 +1,772 @@
+---
+title: "GLMMs"
+author: "vmbolea"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+        code_folding: hide
+        toc: true               
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Data
+
+```{r echo= FALSE, message=FALSE, warning = FALSE}
+library(dplyr)
+library(tidyr)
+library(lubridate)
+
+#read data
+data <- readxl::read_xlsx(path = "data/data_identity.xlsx",
+                          sheet = "DESPLAZAMIENTO",
+                          range =  "C1:V120")
+
+#preparing data
+
+data <- as.data.frame(data) |>
+  dplyr::mutate(
+    month = lubridate::month(created_at),
+    context = ifelse(`88_Motivacin_del_des` == "Alimentación", "Feeding", "Defense")
+  )
+  
+cols_seguidores <- grep("Seguidor", names(data), value = TRUE)
+
+individuos_status <- c(
+  "BUENO" = "M", 
+  "OSO" = "M",
+  "GANDHI" = "M",
+  "GRU" = "M",
+  "FELIPE" = "M",
+  "ALHAMBRA" = "AFL",
+  "MOMI" = "AFL",
+  "PATILLAS" = "AFL",
+  "LOCA" = "AFL",
+  "CHINA" = "AFL",
+  "OJER" = "AFC",
+  "BUBBLE" = "AFC",
+  "WOW" = "AFL", 
+  "UVE" = "AFL", 
+  "QUERIDA" = "AFD",
+  "TERE" = "AFD",
+  "BUENA" = "AFD",
+  "CYNTHIA" = "AFC",
+  "ABU" = "AFC",
+  "EW" = "AFC",
+  "MULLET" = "AFC",
+  "DOS"= "AFL",
+  "SOLA" = "AFC"
+)
+
+individuos_table <- data.frame(id = names(individuos_status), 
+                               sex = ifelse(individuos_status == "M", "M", "F"), 
+                               reprostatus = individuos_status)
+
+
+
+dat <- data |>
+  dplyr::rowwise()  |>
+  dplyr::mutate(
+    leader_sex = individuos_table$sex[ match(`78_Leader`, individuos_table$id) ],
+    leader_reprostatus = individuos_table$reprostatus[ match(`78_Leader`, individuos_table$id) ],
+    follower_id = list(
+      individuos_table$id[
+        match(
+          dplyr::c_across(
+            dplyr::all_of(cols_seguidores)), individuos_table$id 
+        )
+      ]
+    ),
+    month = lubridate::month(created_at),
+    context = ifelse(`88_Motivacin_del_des` == "Alimentación", "Feeding", "Defense")
+  )  |>
+  dplyr::ungroup()
+
+
+followers_long <- dat |>
+  select(`78_Leader`, leader_sex,leader_reprostatus, follower_id, context, month)  |>
+  tidyr::unnest_longer(follower_id)  |>
+  mutate(follower_sex = individuos_table$sex[match(follower_id, individuos_table$id)],
+         follower_reprostatus = individuos_table$reprostatus[match(follower_id, individuos_table$id)]) |>
+  na.omit()
+
+
+# 2) Contar movimientos por individuo
+leaders <- dat |>
+  group_by(ind = `78_Leader`, sex = leader_sex, repro_status = leader_reprostatus, context, month) |>
+  summarise(n_leader = n(), .groups = "drop")
+
+followers <- followers_long |>
+  group_by(ind = follower_id, follower_sex, context, month) |>
+  summarise(n_follower = n(), .groups = "drop") |>
+  na.omit()
+
+
+ind_counts <- left_join(leaders, followers, by = c("ind", "context", "month")) |>
+  mutate(
+    n_leader   = ifelse(is.na(n_leader), 0, n_leader),
+    n_follower = ifelse(is.na(n_follower), 0, n_follower),
+    total = n_leader + n_follower,
+    prop_leader = n_leader / total
+  ) |>
+  dplyr::transmute(
+    ID = ind,
+    sex,
+    repro_status,
+    context,
+    month,
+    n_leader
+  )
+
+following <- data[,5:15]
+
+
+df_followers <- dat[,c(cols_seguidores, "context", "month")]  %>%
+  mutate(row_id = row_number(),
+         n_followers = rowSums(!is.na(.)) - 2) %>%  # count non-NA per row
+  pivot_longer(
+    cols = -c(row_id, n_followers, context, month),
+    names_to = "column_name",
+    values_to = "name"
+  ) %>%
+  filter(!is.na(name)) %>%    # keep only non-NA names
+  mutate(n_position = match(column_name, names(following))) %>%
+  select(name, n_position, n_followers, context, month) %>%
+  dplyr::mutate(order_index =(((n_position-1)/2)/((n_followers-1)/2)),
+                fb_position = ifelse(order_index < 0.5, "Front", "Back")) %>%
+  dplyr::group_by(name, fb_position, context, month) %>%
+  summarise(n_times = n(), .groups = "drop")
+
+df_followers <- df_followers %>%
+  group_by(name, month, context, fb_position) %>%
+  summarise(n_times = sum(n_times), .groups = "drop") %>%  # sum in case multiple rows
+  pivot_wider(
+    names_from = fb_position,
+    values_from = n_times,
+    values_fill = 0  # fill missing combinations with 0
+  ) %>%
+  dplyr::transmute(
+    ID = name,
+    month,
+    context,
+    n_front = Front,
+    n_back = Back
+  )
+
+
+data_ <- left_join(df_followers, ind_counts, by = c("ID", "context", "month")) |>
+  dplyr::mutate(
+    sex = individuos_table$sex[ match(ID, individuos_table$id) ],
+    repro_status = individuos_table$reprostatus[match(ID, individuos_table$id) ],
+    n_leader = ifelse(is.na(n_leader), 0, n_leader)
+  ) |>
+  dplyr::transmute(
+    ID,
+    sex,
+    repro_status,
+    context,
+    month,
+    n_leader,
+    n_front,
+    n_back
+  )
+
+```
+
+
+```{r message=FALSE, warning = FALSE}
+
+print(data_, n = 90)
+
+```
+
+# TUTOR: Linear mixed models(GLMM)
+
+To investigate the factors influencing leadership probability, we fitted Generalized Linear Mixed Models (GLMMs) with a binomial error distribution and a logit link function, utilizing the lme4 package.
+
+We constructed the response variable as a two-column matrix binding the number of times an individual acted as a leader versus the number of times they acted as a follower. We ran separate models for each of the two leadership contexts defined previously: 
+
+- 1) movements toward feeding trees and defense-related movements. To test our predictions regarding sex differences, we included sex as the fixed effect in the models for both contexts.
+
+- 2) to evaluate the influence of female reproductive state, we analyzed a subset of the data containing only female subjects, with reproductive status (cycling, lactating, or with dependents) serving as the fixed predictor. 
+
+In all models, we included subject identity as a random intercept to control for repeated measures and potential pseudo-replication arising from sampling the same individuals multiple times. We determined the statistical significance of the fixed effects by performing Likelihood Ratio Tests (LRT), comparing the full models against null models that included only the random intercept, setting the significance threshold at p < .05.
+
+```{r echo = FALSE, message=FALSE, warning = FALSE}
+
+library(dplyr)
+library(lme4)
+library(ggplot2)
+
+dat <- data_ %>%
+  group_by(ID, sex, repro_status, context) %>%
+  summarise(
+    n_leader = sum(n_leader, na.rm = TRUE),
+    n_follower   = sum(n_front + n_back, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(prop = n_leader / (n_leader + n_follower))
+
+```
+
+Data table is prepared for the next analysis aggregating data per month and creating a single column of number of times as follower and the proportion of times that each individual is leader per the total number of movements in each context.
+
+
+```{r message=FALSE, warning = FALSE}
+
+print(dat, n = 90)
+
+```
+
+
+
+## GLMM for sex and context
+
+### Feeding movement
+
+```{r echo = FALSE, message=FALSE, warning = FALSE}
+
+# Dividir datos por contexto
+feed  <- dat %>% filter(context == "Feeding")
+defense <- dat %>% filter(context == "Defense")
+
+# movimientos alimentacion
+m_feed_full <- glmer(
+  cbind(n_leader, n_follower) ~ sex + (1 | ID),
+  data = feed,
+  family = binomial
+)
+
+m_feed_null <- glmer(
+  cbind(n_leader, n_follower) ~ 1 + (1 | ID),
+  data = feed,
+  family = binomial
+)
+
+anova(m_feed_full, m_feed_null)   # LRT
+
+```
+Key points
+
+- Leadership during feeding is generally low, and sex does not have a detectable effect in this dataset.
+
+- Random intercept (1 | ID) accounts for individual differences.
+
+- AIC/BIC slightly increase for the full model → confirms that sex does not improve model fit.
+
+
+
+```{r  message=FALSE, warning = FALSE}
+
+summary(m_feed_full)
+
+```
+Conclusion:
+
+- Leadership probability during feeding is low (~7–10%).
+
+- Sex does not significantly influence leadership during feeding.
+
+- Random intercept accounts for individual differences.
+
+
+### Defence movement
+
+```{r echo = FALSE, message=FALSE, warning = FALSE}
+
+#movimientos defensa
+
+m_def_full <- glmer(
+  cbind(n_leader, n_follower) ~ sex + (1 | ID),
+  data = defense,
+  family = binomial
+)
+
+m_def_null <- glmer(
+  cbind(n_leader, n_follower) ~ 1 + (1 | ID),
+  data = defense,
+  family = binomial
+)
+
+anova(m_def_full, m_def_null)   # LRT
+```
+Key points:
+
+- Males are much more likely to be leaders in defense than females.
+
+- Random intercept accounts for individual differences.
+
+- The large drop in AIC (82.6 → 69.97) further supports the strong effect of sex.
+
+
+```{r  message=FALSE, warning = FALSE}
+
+summary(m_def_full)
+
+```
+Conclusion
+
+- Sex strongly predicts leadership in defense.
+
+- Females rarely lead (~3–4%), males lead much more (~20%).
+
+- Random intercept shows variation among individuals.
+
+- Model diagnostics are reasonable; no extreme residuals.
+
+
+### Boxplot
+
+```{r  message=FALSE, warning = FALSE}
+
+ggplot(dat, aes(x = sex, y = prop, fill = sex)) +
+  geom_boxplot(width = 0.6, alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.4, color = "red", size = 2) +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2, fill = "black") +
+  facet_wrap(~context) +
+  theme_bw() +
+  labs(
+    x = "Sex",
+    y = "Proportion of movements as leader"
+  ) +
+  scale_fill_manual(values = c("F" = "lightblue", "M" = "lightblue")) + 
+  theme(legend.position = "none")
+
+
+```
+
+## GLMM for females with reproduction status and context
+
+```{r echo = FALSE, message=FALSE, warning = FALSE}
+
+females <- dat %>% filter(sex == "F")
+
+```
+
+
+### Feeding movement
+
+```{r echo = FALSE, message=FALSE, warning = FALSE}
+
+# alimentacion
+f_feed_full <- glmer(
+  cbind(n_leader, n_follower) ~ repro_status + (1 | ID),
+  data = females %>% filter(context == "Feeding"),
+  family = binomial
+)
+
+f_feed_null <- glmer(
+  cbind(n_leader, n_follower) ~ 1 + (1 | ID),
+  data = females %>% filter(context == "Feeding"),
+  family = binomial
+)
+
+anova(f_feed_full, f_feed_null)
+
+```
+Key points
+
+- Leadership probability in female feeding movements depends on reproductive status.
+
+- Random intercept (1 | ID) accounts for individual variation.
+
+- Effect is statistically significant (p < 0.05), suggesting biological relevance.
+
+
+```{r  message=FALSE, warning = FALSE}
+
+summary(f_feed_full)
+
+```
+Conclusion:
+
+- Baseline female leaders (reference status) rarely lead (~3%).
+
+- AFD and AFL females lead more often (~9–10%), significant increases.
+
+- Individual variation is moderate (random intercept).
+
+- Effect of reproductive status is statistically significant, meaning leadership during feeding depends on reproductive condition.
+
+
+### Defence movement
+
+```{r echo = FALSE, message=FALSE, warning = FALSE}
+
+f_def_full <- glmer(
+  cbind(n_leader, n_follower) ~ repro_status + (1 | ID),
+  data = females %>% filter(context == "Defense"),
+  family = binomial
+)
+
+f_def_null <- glmer(
+  cbind(n_leader, n_follower) ~ 1 + (1 | ID),
+  data = females %>% filter(context == "Defense"),
+  family = binomial
+)
+
+anova(f_def_full, f_def_null)
+```
+
+Key points:
+
+- Leadership probability among females during defense may depend on reproductive status, but the evidence is weak.
+
+- Random intercept (1 | ID) accounts for individual differences.
+
+- Effect is not statistically significant at the conventional 0.05 level, but it’s close (trend).
+
+```{r  message=FALSE, warning = FALSE}
+
+summary(f_def_full)
+
+```
+
+Conclusion:
+
+- Baseline female leaders (reference status) rarely lead (~1.6%).
+
+- AFL females lead slightly more (~5.5%), significant at p < 0.05.
+
+- AFD females do not differ from baseline.
+
+- Random intercept not contributing; results mostly come from fixed effects.
+
+### Boxplot
+
+```{r  message=FALSE, warning = FALSE}
+
+ggplot(females, aes(x = repro_status, y = prop, fill = repro_status)) +
+  geom_boxplot(width = 0.6, alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.4, color = "red", size = 2) +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2, fill = "black") +
+  facet_wrap(~context) +
+  theme_bw() +
+  labs(x = "Reproductive status", y = "Proportion of movements as leader") +
+  scale_fill_manual(values = c("AFC" = "lightblue", "AFD" = "lightblue", "AFL" = "lightblue"))+
+  theme(legend.position = "none")
+
+
+```
+
+# PAPER: GLMM with binomial error distributions.
+
+```{r echo = FALSE, message=FALSE, warning = FALSE}
+
+# Load packages
+library(lme4)
+library(multcomp)
+library(dplyr)
+
+# Load your dataset
+# df <- read.csv("your_data.csv")
+
+# Compute follower counts if not already present
+df <- data_ %>%
+  mutate(n_follower = n_front + n_back,
+         prop_leader = n_leader / (n_leader + n_follower),
+         prop_front = n_front / (n_front + n_back))
+
+# Compute relative contribution of each category per month
+df <- df %>%
+  group_by(context, month, sex) %>%
+  mutate(n_category = n()) %>%
+  ungroup() %>%
+  group_by(context, month) %>%
+  mutate(rel_contrib = n_category / max(n_category))
+
+df$ID <- as.factor(df$ID)
+df$sex <- as.factor(df$sex)
+df$repro_status <- as.factor(df$repro_status)
+```
+
+```{r message=FALSE, warning = FALSE}
+
+print(df, n = 90)
+
+```
+
+
+### First prediction with 2 models sex in feeding context
+
+```{r echo = FALSE, message=FALSE, warning = FALSE}
+
+# -----------------------------
+# Function to run models
+# -----------------------------
+
+run_model_leader_prop <- function(data, response_type, predictor, context_name){
+  
+  cat("\nRunning models for context:", context_name, "and predictor:", predictor, "\n")
+  
+  # Subset context
+  dat <- subset(data, context == context_name)
+  
+  if(predictor == "repro_status"){
+    
+    dat <- dat |>
+      dplyr::filter(sex == "F")
+  }
+  
+  # Ensure ID and predictor are factors
+  dat$ID <- as.factor(dat$ID)
+  dat[[predictor]] <- as.factor(dat[[predictor]])
+  
+  # --- Model 1: leader/follower counts (two-vector response) ---
+  formula1 <- as.formula(paste0("cbind(n_leader, n_follower) ~ ", predictor, " + (1|ID)"))
+  model1 <- glmer(formula1,
+                  family = binomial,
+                  data = dat)
+  
+  # Null model
+  formula_null1 <- as.formula("cbind(n_leader, n_follower) ~ (1|ID)")
+  null1 <- glmer(formula_null1,
+                 family = binomial,
+                 data = dat)
+  
+  # Likelihood ratio test
+  lrt1 <- anova(null1, model1, test = "Chisq")
+  print(lrt1)
+  return(list(model1=summary(model1)))
+  }
+
+  
+run_model_order_index <- function(data, response_type, predictor, context_name){
+  
+  cat("\nRunning models for context:", context_name, "and predictor:", predictor, "\n")
+  
+  # Subset context
+  dat <- subset(data, context == context_name)
+  
+   if(predictor == "repro_status"){
+    
+    dat <- dat |>
+      dplyr::filter(sex == "F")
+  }
+  
+  
+  
+  # Ensure ID and predictor are factors
+  dat$ID <- as.factor(dat$ID)
+  dat[[predictor]] <- as.factor(dat[[predictor]])
+  
+  # --- Model 2: progression order index (prop front) ---
+  formula2 <- as.formula(paste0("prop_front ~ ", predictor, " + (1|ID)"))
+  model2 <- lmer(formula2, data = dat)
+  
+  # Null model
+  null2 <- lmer(prop_front ~ (1|ID), data = dat)
+  
+  # Likelihood ratio test
+  lrt2 <- anova(null2, model2, test = "Chisq")
+  print(lrt2)
+  
+  # Post hoc Tukey if predictor is reproductive state
+  if(predictor == "repro_status"){
+    posthoc <- glht(model2, linfct = mcp(repro_status = "Tukey"))
+    print(summary(posthoc))
+  }
+  
+  return(list(model2=summary(model2)))
+}
+
+```
+
+
+-   first, the number of times each individual moved toward a feeding tree as a leader and as a follower per month was added as a two‐vector response variable and the fixed predictor was sex.
+
+```{r message=FALSE, warning = FALSE}
+
+run_model_leader_prop(df, response_type="leader_follower", predictor="sex", context_name="Feeding")
+
+```
+
+Conclusion:
+
+During Feeding, sex does not significantly influence the probability of leading versus following.
+
+Individual variability: there is variation between IDs, reflected in the random effect.
+
+Effect size: males may lead more, but with the current sample there is not enough statistical evidence to support this.
+
+
+```{r message=FALSE, warning = FALSE}
+
+# Filtramos solo el contexto Feeding
+df_feeding <- subset(df, context == "Feeding")
+
+# Boxplot
+ggplot(df_feeding, aes(x = sex, y = prop_leader, fill = sex)) +
+  geom_boxplot(width = 0.6, alpha = 0.6) +
+  geom_jitter(width = 0.15, alpha = 0.4, color = "red", size = 2) +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 3, fill = "black") +
+  theme_bw() +
+  labs(x = "Sex", y = "Proportion of leadership") +
+  scale_fill_manual(values = c("F" = "lightblue", "M" = "lightblue"))+
+  theme(legend.position = "none")
+
+```
+
+-   second, the mean individual monthly progression order index during movements toward feeding trees categorized as “front” or “back” was the dependent variable and sex was the fixed predictor.
+
+
+```{r message=FALSE, warning = FALSE}
+
+run_model_order_index(df, response_type="order_index", predictor="sex", context_name="Feeding")
+
+```
+Conclusion:
+
+During Feeding, sex does not significantly affect the proportion of individuals at the front.
+
+Effect size: males appear to be slightly less at the front than females, but this difference is small and not significant.
+
+Individual variability: there is variation between IDs, reflected in the random effect.
+
+
+```{r message=FALSE, warning = FALSE}
+
+# Crear un dataframe resumido por sexo y posición
+df_bar <- df %>%
+  filter(context == "Feeding") %>%  # filtrar solo Feeding
+  group_by(sex) %>%
+  summarise(
+    front = sum(n_front),
+    back = sum(n_back),
+    total = sum(n_follower)  # total movimientos
+  ) %>%
+  tidyr::pivot_longer(cols = c(front, back), names_to = "position", values_to = "moves") %>%
+  mutate(position = factor(position, levels = c("front", "back")))  # controlamos el orden
+
+
+# Barplot vertical
+ggplot(df_bar, aes(x = sex, y = moves, fill = position)) +
+  geom_bar(stat = "identity", 
+           position = "dodge",  # ancho entre barras
+           width = 0.6,  # ancho de cada barra
+           color = "black") +  # borde negro fino
+  
+  scale_fill_manual(values = c("front" = "#FF9999", "back" = "#99CCFF"),
+                    name = "Follower position") +
+  scale_y_continuous(name = "Number of movements") +
+  scale_x_discrete(name = "Sex", labels = c("F" = "Female", "M" = "Male")) +
+  theme_minimal(base_size = 14) +
+    theme(
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 11),
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+    )
+
+```
+
+
+### Second prediction with 2 models reproductive status in feeding context
+
+-   first, the number of times each individual moved toward feeding trees as leader and as follower per month was added as a two‐vector response variable and the fixed predictor was female reproductive state.
+
+```{r message=FALSE, warning = FALSE}
+
+run_model_leader_prop(df, response_type="leader_follower", predictor="repro_status", context_name="Feeding")
+
+```
+
+
+Conclusion:
+
+Reproductive status strongly influences leadership during feeding.
+
+Both AFD and AFL individuals have higher odds of leading than the baseline group.
+
+AFL individuals show the strongest effect.
+
+
+
+```{r message=FALSE, warning = FALSE}
+
+# Filtramos solo el contexto Feeding
+df_females <- subset(df, sex == "F") |>
+  subset(context == "Feeding")
+
+
+ggplot(df_females, aes(x = repro_status, y = prop_leader, fill = repro_status)) +
+  geom_boxplot(width = 0.6, alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.4, color = "red", size = 2) +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2, fill = "black") +
+  theme_bw() +
+  labs(x = "Reproductive status", y = "Proportion of movements as leader") +
+  scale_fill_manual(values = c("AFC" = "lightblue", "AFD" = "lightblue", "AFL" = "lightblue"))+
+    scale_x_discrete(name = "Reproductive Status", labels = c("AFC" = "Cycling", "AFD" = "Codependent", "AFL" = "Lactanting")) +
+  theme(legend.position = "none")
+
+```
+
+
+-   second, mean individual monthly progression order index during movements toward feeding trees categorized as “front” or “back” was the dependent variable and female reproductive state was the fixed predictor.
+
+```{r message=FALSE, warning = FALSE}
+
+run_model_order_index(df, response_type="order_index", predictor="repro_status", context_name="Feeding")
+
+```
+
+Conclusions:
+
+Reproductive status strongly predicts front positioning during feeding.
+
+AFD individuals are most likely at the front, AFL also more than AFC, while AFC females tend to stay behind.
+
+Individual variation exists but is small compared to the effect of reproductive status.
+
+AFL vs. AFD difference is not significant.
+
+```{r message=FALSE, warning = FALSE}
+# Crear un dataframe resumido por sexo y posición
+df_bar <- df %>%
+  filter(context == "Feeding" & sex == "F") %>%  # filtrar solo Feeding
+  group_by(repro_status) %>%
+  summarise(
+    front = sum(n_front),
+    back = sum(n_back),
+    total = sum(n_follower)  # total movimientos
+  ) %>%
+  tidyr::pivot_longer(cols = c(front, back), names_to = "position", values_to = "moves") %>%
+  mutate(position = factor(position, levels = c("front", "back")))  # controlamos el orden
+
+
+# Barplot vertical
+ggplot(df_bar, aes(x = repro_status, y = moves, fill = position)) +
+  geom_bar(stat = "identity", 
+           position = "dodge",  # ancho entre barras
+           width = 0.6,  # ancho de cada barra
+           color = "black") +  # borde negro fino
+  
+  scale_fill_manual(values = c("front" = "#FF9999", "back" = "#99CCFF"),
+                    name = "Follower position") +
+  scale_y_continuous(name = "Number of movements") +
+  scale_x_discrete(name = "Reproductive Status", labels = c("AFC" = "Cycling", "AFD" = "Codependent", "AFL" = "Lactanting")) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 11),
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+  )
+```
+
+
+
+Third prediction with 2 models
+
+-   first, the number of times each individual moved in association with the occurrence of loud calls as leader and as follower per month was added as a two‐vector response variable, and sex as the fixed predictor.
+
+-   second, mean individual monthly progression order index during movements associated with the occurrence of loud calls, categorized as “front” or “back”, was the dependent variable and sex was the fixed predictor.
+
+In all models, subject identity was included as a random factor to account for the repeated sampling of individuals through time.
+
+A control variable as the relative contribution of each category to the data set by dividing the number of individuals in each particular category (i.e., male/female in tests of the first and third predictions and cycling/gestating/lactating females in tests of the second prediction) per month by the number of individuals in the category with the most individuals in that month.
+
+To determine whether the random factor (i.e., identity) had a stronger impact on dependent variables than fixed factors (Pinheiro & Bates, 2000), we compared all complete models (i.e., with fixed and random factors) with a null model including only the response and the random variables with a likelihood ratio test. In all cases, complete and null models were significantly different (p \< .001), indicating that the random factor had a lower influence on variation in dependent variables than fixed factors.
+
+When the reproductive state had a significant effect in response variables, we ran post hoc Tukey pairwise comparisons. All analyses were performed with R 3.6.0 (R Core Team, 2019) using packages “car” 3.0‐3 (Fox, Weisberg, & Price, 2019), “lme4” 1.1‐21 (Bates, Maechler, Bolker, & Walker, 2019), and “multcomp” 1.4‐10 (Hothorn, Bretz, & Westfall, 2019).
+
