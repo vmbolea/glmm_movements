@@ -425,6 +425,7 @@ ggplot(df_females, aes(x = repro_status, y = prop_leader, fill = repro_status)) 
   theme(legend.position = "none")
 
 ```
+
 FIGURE 3: Differences among females in different reproductive states in leadership during group movements toward feeding trees in two groups of mantled howler monkeys studied at xxxxxxx (Ecuador), between July and October 2024. For illustrating purposes, leadership is represented as the proportion of monthly movements led by each individual. Thick lines inside the boxes are the medians; black diamonds are the means; box limits are the 25th and 75th percentiles; whiskers indicate 1.5\*interquartile ranges. Data points are plotted as red circles. Reproductive status effect (GLMM, LRT p = 0.011); AFD > AFC (p = 0.042), AFL > AFC (p = 0.002). N = 34 movements from 17 subjects.
 
 
@@ -497,6 +498,7 @@ ggplot(df_bar, aes(x = repro_status, y = n_movements, fill = mean_poi_position))
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
   )
 ```
+
 FIGURE 4 Differences among females in different reproductive states in non‐leading positions occupied during group movements toward feeding trees in two groups of mantled howler monkeys studied at at xxxxxxx (Ecuador), between July and October 2024.For illustration purposes, the expected number of movements per position per reproductive status under a 50:50% situation is represented as lines (solid = Codependent, dotdash = Lactating, dotted = Cycling), corrected by the total number of sampled subjects of each reproductive status (Codependent = 3 subjects, Lactating = 7 and Cycling = 7). GLMM (binomial): effect of reproductive status (LRT, p = 0.00021); AFD vs AFC: p < 0.001, AFL vs AFC: p < 0.001; AFL vs AFD: n.s.. N = 34 movements.
 
 
@@ -550,6 +552,7 @@ ggplot(df_defense, aes(x = sex, y = prop_leader, fill = sex)) +
   scale_fill_manual(values = c("F" = "lightblue", "M" = "lightblue"))+
   theme(legend.position = "none")
 ```
+
 FIGURE 5: Differences between sexes in leadership during group movements in associantion with loud calls in two groups of mantled howler monkeys studied at xxxxxxx (Ecuador), between July and October 2024. For illustrating purposes, leadership is represented as the proportion of monthly movements led by each individual. Thick lines inside the boxes are the medians; black diamonds are the means; box limits are the 25th and 75th percentiles; whiskers indicate 1.5\*interquartile ranges. Data points are plotted as red circles. Sex effect on leadership during defense (GLMM, LRT p = 0.00013), with higher leadership probability in males. N = 44 movements from 22 subjects.
 
 
@@ -616,4 +619,5 @@ ggplot(df_bar, aes(x = sex, y = n_movements, fill = mean_poi_position)) +
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
   )
 ```
+
 FIGURE 6 Differences between sexes in non‐leading positions occupied during group movements in associantion with loud calls in two groups of mantled howler monkeys studied at at xxxxxxx (Ecuador), between July and October 2024.For illustration purposes, the expected number of movements per position per sex under a 50:50% situation is represented as lines (solid = females, dashed = males), corrected by the total number of sampled subjects of each sex (females = 17 subjects, males = 5). No significant sex effect (GLMM, LRT p = 0.332). N = 44 movements.
