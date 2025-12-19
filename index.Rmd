@@ -19,6 +19,8 @@ The data is coming from file "data/data_identity.xlsx".
 ```{r echo= TRUE, message=FALSE, warning = FALSE}
 library(dplyr)
 library(ggplot2)
+library(ggpubr)
+
 
 #read data
 data <- readxl::read_xlsx(path = "data/data_identity.xlsx",
@@ -29,7 +31,6 @@ print(data, n = 120)
 ```
 
 The script "data_preparation.R" is used to create the curated data to be used in the models.
-
 
 ```{r message=FALSE, warning = FALSE}
 
@@ -42,18 +43,21 @@ print(data_, n = 90)
 df <- data_
 ```
 
-
 # Linear mixed models(GLMM)
 
 To investigate the factors influencing leadership probability, we fitted Generalized Linear Mixed Models (GLMMs) with a binomial error distribution and a logit link function, utilizing the lme4 package.
 
-We constructed the response variable as a two-column matrix binding the number of times an individual acted as a leader versus the number of times they acted as a follower. We ran separate models for each of the two leadership contexts defined previously: 
+We constructed the response variable as a two-column matrix binding the number of times an individual acted as a leader versus the number of times they acted as a follower. We ran separate models for each of the two leadership contexts defined previously:
 
-- 1) movements toward feeding trees and defense-related movements. To test our predictions regarding sex differences, we included sex as the fixed effect in the models for both contexts.
+-   
 
-- 2) to evaluate the influence of female reproductive state, we analyzed a subset of the data containing only female subjects, with reproductive status (cycling, lactating, or with dependents) serving as the fixed predictor. 
+    1)  movements toward feeding trees and defense-related movements. To test our predictions regarding sex differences, we included sex as the fixed effect in the models for both contexts.
 
-In all models, we included subject identity as a random intercept to control for repeated measures and potential pseudo-replication arising from sampling the same individuals multiple times. We determined the statistical significance of the fixed effects by performing Likelihood Ratio Tests (LRT), comparing the full models against null models that included only the random intercept, setting the significance threshold at p < .05.
+-   
+
+    2)  to evaluate the influence of female reproductive state, we analyzed a subset of the data containing only female subjects, with reproductive status (cycling, lactating, or with dependents) serving as the fixed predictor.
+
+In all models, we included subject identity as a random intercept to control for repeated measures and potential pseudo-replication arising from sampling the same individuals multiple times. We determined the statistical significance of the fixed effects by performing Likelihood Ratio Tests (LRT), comparing the full models against null models that included only the random intercept, setting the significance threshold at p \< .05.
 
 ```{r echo = FALSE, message=FALSE, warning = FALSE}
 
@@ -136,7 +140,6 @@ run_model_leader_prop <- function(data, predictor, context_name){
 
 ```
 
-
 ## Formula for the second model
 
 The model function for predictions where the number of times each individual moved toward as a given context (Feeding or Defense) as front and as back part of the followers per month was added as a two‐vector response variable and the fixed predictor is given by the argument predictor (sex or reproductive status).
@@ -194,7 +197,6 @@ run_model_order_index <- function(data, predictor, context_name) {
 
 ```
 
-
 ## Formula to prepare table with statistics per model
 
 ```{r echo = TRUE, message=FALSE, warning = FALSE}
@@ -233,7 +235,6 @@ return(results_table)
 
 ```
 
-
 # 1st prediction: predictor = sex and context = Feeding
 
 ## 1st model: proportion of leadership
@@ -247,16 +248,16 @@ print(model1$lrt)
 
 
 ```
+
 Conclusions:
 
-- There is no evidence of a sex effect on the probability of leading toward the feeding trees.
+-   There is no evidence of a sex effect on the probability of leading toward the feeding trees.
 
-- Observed differences are likely due to individual variation rather than sex.
+-   Observed differences are likely due to individual variation rather than sex.
 
-- Graphically, males and females should show similar proportions of leaders.
+-   Graphically, males and females should show similar proportions of leaders.
 
 ### Results table
-
 
 ```{r message=FALSE, warning = FALSE}
 
@@ -272,10 +273,15 @@ statistical_table(model_list = model1)
 # Filtramos solo el contexto Feeding
 df_feeding <- subset(df, context == "Feeding")
 
+my_comparisons <- list( c("F", "M"))
+
 # Boxplot
 ggplot(df_feeding, aes(x = sex, y = prop_leader, fill = sex)) +
-  geom_boxplot(width = 0.6, alpha = 0.6) +
-  geom_jitter(width = 0.15, alpha = 0.4, color = "red", size = 2) +
+  geom_boxplot(outlier.shape = NA) +   # caja
+  stat_boxplot(geom = "errorbar", width = 0.2) +  # whiskers encima
+  geom_jitter(width = 0.15, alpha = 0.6, color = "tomato") +
+  # geom_boxplot(width = 0.6, alpha = 0.6) +
+  # geom_jitter(width = 0.15, alpha = 0.4, color = "red", size = 2) +
   stat_summary(fun = mean, geom = "point", shape = 23, size = 3, fill = "black") +
   theme_bw() +
   facet_wrap(~context) +
@@ -286,6 +292,8 @@ ggplot(df_feeding, aes(x = sex, y = prop_leader, fill = sex)) +
 
 
 ```
+
+FIGURE 1: Differences between sexes in leadership during group movements toward feeding trees in two groups of mantled howler monkeys studied at xxxxxxx (Ecuador), between July and October 2024. For illustrating purposes, leadership is represented as the proportion of monthly movements led by each individual. Thick lines inside the boxes are the medians; black diamonds are the means; box limits are the 25th and 75th percentiles; whiskers indicate 1.5\*interquartile ranges. Data points are plotted as red circles. No significant effect of sex (binomial GLMM, LRT p = 0.38). N = 44 movements from 22 subjects.
 
 ## 2nd model: order index progression
 
@@ -298,18 +306,18 @@ print(model2$lrt)
 
 
 ```
+
 Conclusions:
 
-- Sex does not significantly influence feeding position (front vs. back) in this context.
+-   Sex does not significantly influence feeding position (front vs. back) in this context.
 
-- Individual differences play a larger role than sex in explaining variation in feeding behavior.
+-   Individual differences play a larger role than sex in explaining variation in feeding behavior.
 
-- There is no evidence that adding sex as a predictor improves the explanatory power of the model.
+-   There is no evidence that adding sex as a predictor improves the explanatory power of the model.
 
-- Any apparent difference between males and females is small and not statistically supported.
+-   Any apparent difference between males and females is small and not statistically supported.
 
 ### Results table
-
 
 ```{r message=FALSE, warning = FALSE}
 
@@ -328,6 +336,10 @@ df_bar <- df %>%
   group_by(sex, mean_poi_position,context) %>%
   summarise(n_movements = n(), .groups = "drop")
 
+df_bar$mean_poi_position <- factor(
+  df_bar$mean_poi_position,
+  levels = c("Front", "Back")
+)
 
 # Barplot vertical
 ggplot(df_bar, aes(x = sex, y = n_movements, fill = mean_poi_position)) +
@@ -338,6 +350,7 @@ ggplot(df_bar, aes(x = sex, y = n_movements, fill = mean_poi_position)) +
   geom_hline(yintercept = 17, linetype = "solid") +  # Female
   geom_hline(yintercept = 5, linetype = "dashed") + # Male
   scale_fill_manual(values = c("Front" = "#FF9999", "Back" = "#99CCFF"),
+                      # breaks = c("Front", "Back"),
                     name = "Follower position") +
   scale_y_continuous(name = "Number of movements") +
   scale_x_discrete(name = "Sex", labels = c("F" = "Female", "M" = "Male")) +
@@ -351,6 +364,8 @@ ggplot(df_bar, aes(x = sex, y = n_movements, fill = mean_poi_position)) +
 
 
 ```
+
+FIGURE 2 Differences between sexes in non‐leading positions occupied during group movements toward feeding trees in two groups of mantled howler monkeys studied at at xxxxxxx (Ecuador), between July and October 2024.For illustration purposes, the expected number of movements per position per sex under a 50:50% situation is represented as lines (solid = females, dashed = males), corrected by the total number of sampled subjects of each sex (females = 17 subjects, males = 5). No significant effect of sex (binomial GLMM, LRT p = 0.42). N = 44 movements.
 
 # 2nd prediction: predictor = reproductive status and context = Feeding
 
@@ -366,17 +381,18 @@ print(model1$lrt)
 
 
 ```
+
 Conclusions:
 
-- Reproductive status had a significant effect on the probability of being a leader versus a follower during feeding.
+-   Reproductive status had a significant effect on the probability of being a leader versus a follower during feeding.
 
-- Individuals in the AFD reproductive status had a significantly higher likelihood of leading compared to AFC individuals.
+-   Individuals in the AFD reproductive status had a significantly higher likelihood of leading compared to AFC individuals.
 
-- Individuals in the AFL reproductive status also had a significantly higher likelihood of leading compared to AFC individuals.
+-   Individuals in the AFL reproductive status also had a significantly higher likelihood of leading compared to AFC individuals.
 
-- There was no meaningful difference in leadership probability between AFL and AFD individuals.
+-   There was no meaningful difference in leadership probability between AFL and AFD individuals.
 
-- Model comparison confirmed that including reproductive status improved model fit relative to the null model.
+-   Model comparison confirmed that including reproductive status improved model fit relative to the null model.
 
 ### Results table
 
@@ -386,6 +402,7 @@ statistical_table(model_list = model1)
 
 
 ```
+
 ### Boxplot
 
 ```{r  message=FALSE, warning = FALSE}
@@ -396,17 +413,20 @@ df_females <- subset(df, sex == "F") |>
 
 
 ggplot(df_females, aes(x = repro_status, y = prop_leader, fill = repro_status)) +
-  geom_boxplot(width = 0.6, alpha = 0.6) +
-  geom_jitter(width = 0.15, alpha = 0.4, color = "red", size = 2) +
+ geom_boxplot(outlier.shape = NA) +   # caja
+  stat_boxplot(geom = "errorbar", width = 0.2) +  # whiskers encima
+  geom_jitter(width = 0.15, alpha = 0.6, color = "tomato") +
   stat_summary(fun = mean, geom = "point", shape = 23, size = 2, fill = "black") +
   theme_bw() +
   facet_wrap(~context) +
-  labs(x = "Reproductive status", y = "Proportion of movements as leader") +
+  labs(x = "Reproductive status", y = "Proportion of monthly movements as leader") +
   scale_fill_manual(values = c("AFC" = "lightblue", "AFD" = "lightblue", "AFL" = "lightblue"))+
   scale_x_discrete(name = "Reproductive Status", labels = c("AFC" = "Cycling", "AFD" = "Codependent", "AFL" = "Lactanting")) +
   theme(legend.position = "none")
 
 ```
+FIGURE 3: Differences among females in different reproductive states in leadership during group movements toward feeding trees in two groups of mantled howler monkeys studied at xxxxxxx (Ecuador), between July and October 2024. For illustrating purposes, leadership is represented as the proportion of monthly movements led by each individual. Thick lines inside the boxes are the medians; black diamonds are the means; box limits are the 25th and 75th percentiles; whiskers indicate 1.5\*interquartile ranges. Data points are plotted as red circles. Reproductive status effect (GLMM, LRT p = 0.011); AFD > AFC (p = 0.042), AFL > AFC (p = 0.002). N = 34 movements from 17 subjects.
+
 
 ## 2nd model: order index progression
 
@@ -420,22 +440,24 @@ print(model2$lrt)
 
 
 ```
+
 Conclusions:
 
-- Reproductive status has a strong and statistically significant effect on feeding response position.
+-   Reproductive status has a strong and statistically significant effect on feeding response position.
 
-- Both AFD and AFL show higher front responses than AFC, with AFD showing the strongest effect.
+-   Both AFD and AFL show higher front responses than AFC, with AFD showing the strongest effect.
 
-- Individual differences contribute meaningfully to variation in responses.
+-   Individual differences contribute meaningfully to variation in responses.
 
 ### Results table
 
 ```{r message=FALSE, warning = FALSE}
 
-statistical_table(model_list = model1)
+statistical_table(model_list = model2)
 
 
 ```
+
 ### Barplot
 
 ```{r  message=FALSE, warning = FALSE}
@@ -450,6 +472,10 @@ df_bar <- rbind(df_bar,
                 data.frame(repro_status = "AFD", mean_poi_position = "Back", context = "Feeding", n_movements = 0)
                 )
 
+df_bar$mean_poi_position <- factor(
+  df_bar$mean_poi_position,
+  levels = c("Front", "Back")
+)
 
 # Barplot vertical
 ggplot(df_bar, aes(x = repro_status, y = n_movements, fill = mean_poi_position)) +
@@ -463,7 +489,7 @@ ggplot(df_bar, aes(x = repro_status, y = n_movements, fill = mean_poi_position))
   scale_fill_manual(values = c("Front" = "#FF9999", "Back" = "#99CCFF"),
                     name = "Follower position") +
   scale_y_continuous(name = "Number of movements") +
-  scale_x_discrete(name = "Reproductive Status", labels = c("AFC" = "Cycling", "AFD" = "Codependent", "AFL" = "Lactanting")) +
+  scale_x_discrete(name = "Reproductive Status", labels = c("AFC" = "Cycling", "AFD" = "Codependent", "AFL" = "Lactating")) +
   theme_minimal(base_size = 14) +
   theme(
     legend.title = element_text(size = 12),
@@ -471,6 +497,8 @@ ggplot(df_bar, aes(x = repro_status, y = n_movements, fill = mean_poi_position))
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
   )
 ```
+FIGURE 4 Differences among females in different reproductive states in non‐leading positions occupied during group movements toward feeding trees in two groups of mantled howler monkeys studied at at xxxxxxx (Ecuador), between July and October 2024.For illustration purposes, the expected number of movements per position per reproductive status under a 50:50% situation is represented as lines (solid = Codependent, dotdash = Lactating, dotted = Cycling), corrected by the total number of sampled subjects of each reproductive status (Codependent = 3 subjects, Lactating = 7 and Cycling = 7). GLMM (binomial): effect of reproductive status (LRT, p = 0.00021); AFD vs AFC: p < 0.001, AFL vs AFC: p < 0.001; AFL vs AFD: n.s.. N = 34 movements.
+
 
 # 3rd prediction: predictor = sex and context = Defense
 
@@ -485,17 +513,16 @@ print(model1$lrt)
 
 
 ```
+
 Conclusions:
 
-- Sex has a strong and statistically significant effect on defensive role.
+-   Sex has a strong and statistically significant effect on defensive role.
 
-- Males are substantially more likely to act as leaders during defense than females.
+-   Males are substantially more likely to act as leaders during defense than females.
 
-- Individual differences contribute meaningfully to variation in defensive behavior.
-
+-   Individual differences contribute meaningfully to variation in defensive behavior.
 
 ### Results table
-
 
 ```{r message=FALSE, warning = FALSE}
 
@@ -523,6 +550,8 @@ ggplot(df_defense, aes(x = sex, y = prop_leader, fill = sex)) +
   scale_fill_manual(values = c("F" = "lightblue", "M" = "lightblue"))+
   theme(legend.position = "none")
 ```
+FIGURE 5: Differences between sexes in leadership during group movements in associantion with loud calls in two groups of mantled howler monkeys studied at xxxxxxx (Ecuador), between July and October 2024. For illustrating purposes, leadership is represented as the proportion of monthly movements led by each individual. Thick lines inside the boxes are the medians; black diamonds are the means; box limits are the 25th and 75th percentiles; whiskers indicate 1.5\*interquartile ranges. Data points are plotted as red circles. Sex effect on leadership during defense (GLMM, LRT p = 0.00013), with higher leadership probability in males. N = 44 movements from 22 subjects.
+
 
 ## 2nd model: order index progression
 
@@ -538,12 +567,11 @@ print(model2$lrt)
 
 Conclusions:
 
-- Sex has no detectable effect on the direction (front vs back) of defensive responses.
+-   Sex has no detectable effect on the direction (front vs back) of defensive responses.
 
-- Variation in defensive response direction is driven primarily by individual differences, not sex.
+-   Variation in defensive response direction is driven primarily by individual differences, not sex.
 
-- In contrast to leader–follower defense, front–back positioning during defense is sex-independent.
-
+-   In contrast to leader–follower defense, front–back positioning during defense is sex-independent.
 
 ### Results table
 
@@ -563,6 +591,10 @@ df_bar <- df %>%
   group_by(sex, mean_poi_position,context) %>%
   summarise(n_movements = n(), .groups = "drop")
 
+df_bar$mean_poi_position <- factor(
+  df_bar$mean_poi_position,
+  levels = c("Front", "Back")
+)
 
 # Barplot vertical
 ggplot(df_bar, aes(x = sex, y = n_movements, fill = mean_poi_position)) +
@@ -584,5 +616,4 @@ ggplot(df_bar, aes(x = sex, y = n_movements, fill = mean_poi_position)) +
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
   )
 ```
-
-
+FIGURE 6 Differences between sexes in non‐leading positions occupied during group movements in associantion with loud calls in two groups of mantled howler monkeys studied at at xxxxxxx (Ecuador), between July and October 2024.For illustration purposes, the expected number of movements per position per sex under a 50:50% situation is represented as lines (solid = females, dashed = males), corrected by the total number of sampled subjects of each sex (females = 17 subjects, males = 5). No significant sex effect (GLMM, LRT p = 0.332). N = 44 movements.
