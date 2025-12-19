@@ -542,9 +542,10 @@ df_defense <- subset(df, context == "Defense")
 
 # Boxplot
 ggplot(df_defense, aes(x = sex, y = prop_leader, fill = sex)) +
-  geom_boxplot(width = 0.6, alpha = 0.6) +
-  geom_jitter(width = 0.15, alpha = 0.4, color = "red", size = 2) +
-  stat_summary(fun = mean, geom = "point", shape = 23, size = 3, fill = "black") +
+   geom_boxplot(outlier.shape = NA) +   # caja
+  stat_boxplot(geom = "errorbar", width = 0.2) +  # whiskers encima
+  geom_jitter(width = 0.15, alpha = 0.6, color = "tomato") +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 2, fill = "black") +
   theme_bw() +
   facet_wrap(~context) +
   labs(x = "Sex", y = "Proportion of monthly movements as leader") +
